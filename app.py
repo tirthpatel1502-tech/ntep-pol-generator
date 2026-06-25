@@ -7,12 +7,13 @@ from streamlit_gsheets import GSheetsConnection
 st.set_page_config(page_title="NTEP Automation", layout="wide")
 st.title("📄 NTEP Monthly POL Document Generator")
 
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1lvBqt_rLHPChNZyWDe-v951iIFBOgStZWHiDVClBtE0/edit"
+# The EXACT URL with the gid so it reads the correct tab every time
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1lvBqt_rLHPChNZyWDe-v951iIFBOgStZWHiDVClBtE0/edit?gid=57196367#gid=57196367"
 
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
     
-    # ttl=0 FORCES Streamlit to clear its cache and read the live sheet immediately
+    # ttl=0 forces it to get the freshest data immediately
     df = conn.read(spreadsheet=SHEET_URL, header=1, ttl=0) 
     
     # --- DATA CLEANING ---
@@ -24,8 +25,7 @@ try:
     
     df = df.dropna(subset=['Name of Employee'])
     
-    # --- FIX FOR COMMAS IN NUMBERS ---
-    # This removes any commas (e.g. 1,500 becomes 1500) before doing math
+    # --- CLEAN COMMAS AND NUMBERS ---
     cols_to_clean = ['V.P', 'V.M', 'Mis', 'Tb harega desh jitega', 'Total']
     for col in cols_to_clean:
         df[col] = df[col].astype(str).str.replace(',', '', regex=True).str.strip()
@@ -35,8 +35,11 @@ try:
     df = df[df['Total'] > 0] 
 
     st.success("✅ Connected to Google Sheets!")
-    # DEBUG: This will show you exactly how many rows of data it successfully read
+    
+    # This will prove it is reading the correct tab!
     st.write(f"📊 Processed {len(df)} employees with a valid total.")
+    if len(df) == 0:
+        st.error("⚠️ 0 employees found! Please verify the 'header=1' setting matches your sheet layout.")
 
     # --- CALCULATIONS ---
     vehicle_total = int(df['V.P'].sum() + df['V.M'].sum())
