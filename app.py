@@ -7,35 +7,42 @@ from streamlit_gsheets import GSheetsConnection
 st.set_page_config(page_title="NTEP Automation", layout="wide")
 st.title("📄 NTEP Monthly POL Document Generator")
 
+# Your verified Google Sheet URL
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1lvBqt_rLHPChNZyWDe-v951iIFBOgStZWHiDVClBtE0/edit"
 
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
-    # Read the sheet, skipping the first row (the title row)
+    # Read the sheet, treating the second row as headers
     df = conn.read(spreadsheet=SHEET_URL, header=1) 
     
-    # Debug: Show the actual columns found so we can see why it fails
-    st.write("Columns found:", df.columns.tolist())
+    # 1. CLEANING: Remove all columns that are blank/Unnamed
+    df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
     
-    # Rename columns based on their position (0=SrNo, 1=Name, 2=Bank, 3=IFSC, 4=Designation, 13=Total)
-    df.columns = ['Sr. No.', 'Name of Employee', 'Bank  A/c No.', 'IFSC Code', 'Designation', 'Vehicle No.', 'V.P', 'V.M', 'Mis', 'Training', 'SM', 'L.M', 'Tb harega desh jitega', 'Total']
+    # Debug: Check what columns are left after cleaning
+    # st.write("Columns found:", df.columns.tolist())
     
-    # Clean the data
+    # 2. CLEANING: Drop rows that don't look like valid employee data
+    # (We look for valid rows where 'Name of Employee' exists)
     df = df.dropna(subset=['Name of Employee'])
+    
+    # Clean the numbers
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0)
     df = df[df['Total'] > 0] 
 
     st.success("✅ Connected to Google Sheets!")
-    
-    # Calculate Totals
+
+    # 3. Perform Calculations
     vehicle_total = df['V.P'].fillna(0).sum() + df['V.M'].fillna(0).sum()
     office_total = df['Mis'].fillna(0).sum()
     meeting_total = df['Tb harega desh jitega'].fillna(0).sum()
     grand_total = df['Total'].fillna(0).sum()
 
-    st.markdown("### 📝 Step 2: Enter Gujarati Words")
+    st.markdown("### 📝 Step 2: Finalize Details")
+    st.info(f"**Calculated Grand Total: ₹{int(grand_total)}**")
+    
     grand_total_words = st.text_input("Type the Gujarati words for the total amount:", placeholder="e.g. એકસઠ હજાર છસો નેવું")
 
+    # 4. Prepare Data
     employees_list = []
     for index, row in df.iterrows():
         employees_list.append({
@@ -56,6 +63,7 @@ try:
         'grand_total_words': grand_total_words
     }
 
+    # 5. Download Generation
     def generate_docx():
         doc = DocxTemplate("template.docx")
         doc.render(context)
