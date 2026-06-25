@@ -11,9 +11,11 @@ SHEET_URL = "https://docs.google.com/spreadsheets/d/1lvBqt_rLHPChNZyWDe-v951iIFB
 
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
-    df = conn.read(spreadsheet=SHEET_URL, header=1) 
     
-    # --- DATA CLEANING & TYPE FORCING ---
+    # ttl=0 FORCES Streamlit to clear its cache and read the live sheet immediately
+    df = conn.read(spreadsheet=SHEET_URL, header=1, ttl=0) 
+    
+    # --- DATA CLEANING ---
     df.columns = df.columns.str.strip()
     df = df.iloc[:, :14]
     df.columns = ['Sr. No.', 'Name of Employee', 'Bank  A/c No.', 'IFSC Code', 'Designation', 
@@ -22,18 +24,21 @@ try:
     
     df = df.dropna(subset=['Name of Employee'])
     
-    # Force numbers to be clean floats/ints, avoid numpy types
-    df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0).astype(float)
-    df['V.P'] = pd.to_numeric(df['V.P'], errors='coerce').fillna(0).astype(float)
-    df['V.M'] = pd.to_numeric(df['V.M'], errors='coerce').fillna(0).astype(float)
-    df['Mis'] = pd.to_numeric(df['Mis'], errors='coerce').fillna(0).astype(float)
-    df['Tb harega desh jitega'] = pd.to_numeric(df['Tb harega desh jitega'], errors='coerce').fillna(0).astype(float)
+    # --- FIX FOR COMMAS IN NUMBERS ---
+    # This removes any commas (e.g. 1,500 becomes 1500) before doing math
+    cols_to_clean = ['V.P', 'V.M', 'Mis', 'Tb harega desh jitega', 'Total']
+    for col in cols_to_clean:
+        df[col] = df[col].astype(str).str.replace(',', '', regex=True).str.strip()
+        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(float)
     
+    # Only keep rows where Total > 0
     df = df[df['Total'] > 0] 
 
     st.success("✅ Connected to Google Sheets!")
-    
-    # --- CALCULATIONS (Forcing pure Python types) ---
+    # DEBUG: This will show you exactly how many rows of data it successfully read
+    st.write(f"📊 Processed {len(df)} employees with a valid total.")
+
+    # --- CALCULATIONS ---
     vehicle_total = int(df['V.P'].sum() + df['V.M'].sum())
     office_total = int(df['Mis'].sum())
     meeting_total = int(df['Tb harega desh jitega'].sum())
@@ -82,5 +87,4 @@ try:
             st.download_button("⬇️ Download Final Payment Order (.docx)", file_buffer, "SNA_SPARSH_Payment_Order.docx")
 
 except Exception as e:
-    # Use str(e) to ensure the error message itself doesn't cause a concat error
     st.error(f"Error: {str(e)}")
