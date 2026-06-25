@@ -31,7 +31,54 @@ try:
     st.markdown("### 📝 Step 2: Enter Gujarati Words")
     st.info(f"**Calculated Grand Total is: ₹{int(grand_total)}**")
     
-    # This creates a text box on your dashboard for the Gujarati words
     grand_total_words = st.text_input(
         f"Type the Gujarati words for {int(grand_total)} here:", 
-        placeholder="e.g., એકસ
+        placeholder="e.g. Type Gujarati words here"
+    )
+
+    # Prepare Data for Word
+    employees_list = []
+    for index, row in df.iterrows():
+        employees_list.append({
+            'sr_no': int(row['Sr. No.']),
+            'name': row['Name of Employee'],
+            'account': str(row['Bank  A/c No.']), 
+            'ifsc': row['IFSC Code'],
+            'designation': row['Designation'],
+            'total': int(row['Total'])
+        })
+
+    context = {
+        'employees': employees_list,
+        'vehicle_total': int(vehicle_total),
+        'office_total': int(office_total),
+        'meeting_total': int(meeting_total),
+        'grand_total': int(grand_total),
+        'grand_total_words': grand_total_words 
+    }
+
+    def generate_docx():
+        doc = DocxTemplate("template.docx")
+        doc.render(context)
+        buffer = io.BytesIO()
+        doc.save(buffer)
+        buffer.seek(0)
+        return buffer
+
+    st.markdown("---")
+    st.subheader("⬇️ Step 3: Generate & Download")
+    
+    if st.button("Generate Monthly Word File"):
+        if not grand_total_words:
+            st.warning("⚠️ Please type the Gujarati words for the total amount before generating.")
+        else:
+            file_buffer = generate_docx()
+            st.download_button(
+                label="⬇️ Download Final Payment Order (.docx)",
+                data=file_buffer,
+                file_name="SNA_SPARSH_Payment_Order.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+
+except Exception as e:
+    st.error(f"Could not connect or process data: {e}")
