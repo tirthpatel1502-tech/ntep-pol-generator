@@ -11,42 +11,40 @@ SHEET_URL = "https://docs.google.com/spreadsheets/d/1lvBqt_rLHPChNZyWDe-v951iIFB
 
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
-    # Read the sheet (header=1 means the second row is the header)
     df = conn.read(spreadsheet=SHEET_URL, header=1) 
     
-    # --- HARD FIX FOR COLUMN NAMES ---
-    # 1. Strip whitespace from all column names (fixes the "hidden space" error)
+    # --- DATA CLEANING & TYPE FORCING ---
     df.columns = df.columns.str.strip()
-    
-    # 2. Force the column names to a known set based on your sheet structure
-    # This ignores whatever is currently written in the sheet and maps them by order
-    expected_cols = ['Sr. No.', 'Name of Employee', 'Bank  A/c No.', 'IFSC Code', 'Designation', 
-                     'Vehicle No.', 'V.P', 'V.M', 'Mis', 'Training', 'SM', 'L.M', 
-                     'Tb harega desh jitega', 'Total']
-    
-    # Ensure we only take the first 14 columns and rename them
     df = df.iloc[:, :14]
-    df.columns = expected_cols
+    df.columns = ['Sr. No.', 'Name of Employee', 'Bank  A/c No.', 'IFSC Code', 'Designation', 
+                  'Vehicle No.', 'V.P', 'V.M', 'Mis', 'Training', 'SM', 'L.M', 
+                  'Tb harega desh jitega', 'Total']
     
-    # --- DATA CLEANING ---
     df = df.dropna(subset=['Name of Employee'])
-    df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0)
+    
+    # Force numbers to be clean floats/ints, avoid numpy types
+    df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0).astype(float)
+    df['V.P'] = pd.to_numeric(df['V.P'], errors='coerce').fillna(0).astype(float)
+    df['V.M'] = pd.to_numeric(df['V.M'], errors='coerce').fillna(0).astype(float)
+    df['Mis'] = pd.to_numeric(df['Mis'], errors='coerce').fillna(0).astype(float)
+    df['Tb harega desh jitega'] = pd.to_numeric(df['Tb harega desh jitega'], errors='coerce').fillna(0).astype(float)
+    
     df = df[df['Total'] > 0] 
 
     st.success("✅ Connected to Google Sheets!")
     
-    # --- CALCULATIONS ---
-    vehicle_total = df['V.P'].fillna(0).sum() + df['V.M'].fillna(0).sum()
-    office_total = df['Mis'].fillna(0).sum()
-    meeting_total = df['Tb harega desh jitega'].fillna(0).sum()
-    grand_total = df['Total'].fillna(0).sum()
+    # --- CALCULATIONS (Forcing pure Python types) ---
+    vehicle_total = int(df['V.P'].sum() + df['V.M'].sum())
+    office_total = int(df['Mis'].sum())
+    meeting_total = int(df['Tb harega desh jitega'].sum())
+    grand_total = int(df['Total'].sum())
 
     st.markdown("### 📝 Step 2: Finalize Details")
-    st.info(f"**Calculated Grand Total: ₹{int(grand_total)}**")
+    st.info(f"**Calculated Grand Total: ₹{grand_total}**")
     
     grand_total_words = st.text_input("Type the Gujarati words for the total amount:", placeholder="e.g. એકસઠ હજાર છસો નેવું")
 
-    # --- WORD GEN SETUP ---
+    # --- PREPARE DATA ---
     employees_list = []
     for index, row in df.iterrows():
         employees_list.append({
@@ -60,11 +58,11 @@ try:
 
     context = {
         'employees': employees_list,
-        'vehicle_total': int(vehicle_total),
-        'office_total': int(office_total),
-        'meeting_total': int(meeting_total),
-        'grand_total': int(grand_total),
-        'grand_total_words': grand_total_words
+        'vehicle_total': vehicle_total,
+        'office_total': office_total,
+        'meeting_total': meeting_total,
+        'grand_total': grand_total,
+        'grand_total_words': str(grand_total_words)
     }
 
     def generate_docx():
@@ -84,4 +82,5 @@ try:
             st.download_button("⬇️ Download Final Payment Order (.docx)", file_buffer, "SNA_SPARSH_Payment_Order.docx")
 
 except Exception as e:
-    st.error(f"Error: {e}")
+    # Use str(e) to ensure the error message itself doesn't cause a concat error
+    st.error(f"Error: {str(e)}")
